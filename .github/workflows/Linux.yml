@@ -32,6 +32,7 @@ jobs:
     - name: Install required ubuntu packages
       if: ${{ matrix.arch == 'linux_amd64' || matrix.arch == 'linux_arm64' }}
       run: |
+        export PATH=$PATH:/usr/bin/
         apt update
         apt install apt
         apt-get update -y -qq
