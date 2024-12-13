@@ -484,17 +484,21 @@ static void PostgresScan(ClientContext &context, TableFunctionInput &data, DataC
 	local_state.ScanChunk(context, bind_data, gstate, output);
 }
 
-static idx_t PostgresScanBatchIndex(ClientContext &context, const FunctionData *bind_data_p,
-                                    LocalTableFunctionState *local_state_p, GlobalTableFunctionState *global_state) {
-	auto &bind_data = bind_data_p->Cast<PostgresBindData>();
-	auto &local_state = local_state_p->Cast<PostgresLocalState>();
-	return local_state.batch_idx;
+static OperatorPartitionData PostgresGetPartitionData(ClientContext &context, TableFunctionGetPartitionInput &input) {
+	if (input.partition_info.RequiresPartitionColumns()) {
+		throw InternalException("PostgresScan::GetPartitionData: partition columns not supported");
+	}
+	auto &bind_data = input.bind_data->Cast<PostgresBindData>();
+	auto &local_state = input.local_state->Cast<PostgresLocalState>();
+	return OperatorPartitionData(local_state.batch_idx);
 }
 
-static string PostgresScanToString(const FunctionData *bind_data_p) {
-	D_ASSERT(bind_data_p);
-	auto &bind_data = bind_data_p->Cast<PostgresBindData>();
-	return bind_data.table_name;
+static InsertionOrderPreservingMap<string> PostgresScanToString(TableFunctionToStringInput &input) {
+	D_ASSERT(input.bind_data);
+	InsertionOrderPreservingMap<string> result;
+	auto &bind_data = input.bind_data->Cast<PostgresBindData>();
+	result["Table"] = bind_data.table_name;
+	return result;
 }
 
 unique_ptr<NodeStatistics> PostgresScanCardinality(ClientContext &context, const FunctionData *bind_data_p) {
@@ -538,7 +542,7 @@ PostgresScanFunction::PostgresScanFunction()
 	to_string = PostgresScanToString;
 	serialize = PostgresScanSerialize;
 	deserialize = PostgresScanDeserialize;
-	get_batch_index = PostgresScanBatchIndex;
+	get_partition_data = PostgresGetPartitionData;
 	cardinality = PostgresScanCardinality;
 	table_scan_progress = PostgresScanProgress;
 	projection_pushdown = true;
@@ -551,7 +555,7 @@ PostgresScanFunctionFilterPushdown::PostgresScanFunctionFilterPushdown()
 	to_string = PostgresScanToString;
 	serialize = PostgresScanSerialize;
 	deserialize = PostgresScanDeserialize;
-	get_batch_index = PostgresScanBatchIndex;
+	get_partition_data = PostgresGetPartitionData;
 	cardinality = PostgresScanCardinality;
 	table_scan_progress = PostgresScanProgress;
 	projection_pushdown = true;
