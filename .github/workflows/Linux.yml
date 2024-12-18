@@ -27,6 +27,7 @@ jobs:
       VCPKG_TARGET_TRIPLET: ${{ matrix.vcpkg_triplet }}
       GEN: Ninja
       VCPKG_TOOLCHAIN_PATH: ${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
     steps:
     - name: Install required ubuntu packages
@@ -112,7 +113,7 @@ jobs:
         source ./create-postgres-tables.sh
         make test_release
 
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: ${{matrix.arch}}-extensions
         path: |

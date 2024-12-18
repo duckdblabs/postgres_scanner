@@ -158,6 +158,18 @@ static unique_ptr<FunctionData> PostgresBind(ClientContext &context, TableFuncti
 	return std::move(bind_data);
 }
 
+static bool ContainsCastToVarchar(const PostgresType &type) {
+	if (type.info == PostgresTypeAnnotation::CAST_TO_VARCHAR) {
+		return true;
+	}
+	for (auto &child : type.children) {
+		if (ContainsCastToVarchar(child)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static void PostgresInitInternal(ClientContext &context, const PostgresBindData *bind_data_p,
                                  PostgresLocalState &lstate, idx_t task_min, idx_t task_max) {
 	D_ASSERT(bind_data_p);
@@ -181,13 +193,19 @@ static void PostgresInitInternal(ClientContext &context, const PostgresBindData 
 			col_names += KeywordHelper::WriteQuoted(bind_data->names[column_id], '"');
 			if (bind_data->postgres_types[column_id].info == PostgresTypeAnnotation::CAST_TO_VARCHAR) {
 				col_names += "::VARCHAR";
-			}
-			if (bind_data->types[column_id].id() == LogicalTypeId::LIST) {
+			} else if (bind_data->types[column_id].id() == LogicalTypeId::LIST) {
 				if (bind_data->postgres_types[column_id].info != PostgresTypeAnnotation::STANDARD) {
 					continue;
 				}
 				if (bind_data->postgres_types[column_id].children[0].info == PostgresTypeAnnotation::CAST_TO_VARCHAR) {
 					col_names += "::VARCHAR[]";
+				}
+			} else {
+				if (ContainsCastToVarchar(bind_data->postgres_types[column_id])) {
+					throw NotImplementedException("Error reading table \"%s\" - cast to varchar not implemented for "
+					                              "composite column \"%s\" (type %s)",
+					                              bind_data->table_name, bind_data->names[column_id],
+					                              bind_data->types[column_id].ToString());
 				}
 			}
 		}
@@ -212,14 +230,14 @@ static void PostgresInitInternal(ClientContext &context, const PostgresBindData 
 		D_ASSERT(!bind_data->sql.empty());
 		lstate.sql = StringUtil::Format(
 		    R"(
-	COPY (SELECT %s FROM (%s) AS __unnamed_subquery %s) TO STDOUT (FORMAT binary);
+	COPY (SELECT %s FROM (%s) AS __unnamed_subquery %s) TO STDOUT (FORMAT "binary");
 	)",
 		    col_names, bind_data->sql, filter);
 
 	} else {
 		lstate.sql = StringUtil::Format(
 		    R"(
-	COPY (SELECT %s FROM %s.%s %s) TO STDOUT (FORMAT binary);
+	COPY (SELECT %s FROM %s.%s %s) TO STDOUT (FORMAT "binary");
 	)",
 		    col_names, KeywordHelper::WriteQuoted(bind_data->schema_name, '"'),
 		    KeywordHelper::WriteQuoted(bind_data->table_name, '"'), filter);
@@ -483,7 +501,6 @@ double PostgresScanProgress(ClientContext &context, const FunctionData *bind_dat
 
 	lock_guard<mutex> parallel_lock(gstate.lock);
 	double progress = 100 * double(gstate.page_idx) / double(bind_data.pages_approx);
-	;
 	return MinValue<double>(100, progress);
 }
 
@@ -506,6 +523,7 @@ PostgresScanFunction::PostgresScanFunction()
 	cardinality = PostgresScanCardinality;
 	table_scan_progress = PostgresScanProgress;
 	projection_pushdown = true;
+	global_initialization = TableFunctionInitialization::INITIALIZE_ON_SCHEDULE;
 }
 
 PostgresScanFunctionFilterPushdown::PostgresScanFunctionFilterPushdown()
@@ -519,6 +537,7 @@ PostgresScanFunctionFilterPushdown::PostgresScanFunctionFilterPushdown()
 	table_scan_progress = PostgresScanProgress;
 	projection_pushdown = true;
 	filter_pushdown = true;
+	global_initialization = TableFunctionInitialization::INITIALIZE_ON_SCHEDULE;
 }
 
 } // namespace duckdb
