@@ -33,6 +33,9 @@ public:
 	string GetCatalogType() override {
 		return "postgres";
 	}
+	string GetDefaultSchema() const override {
+		return default_schema.empty() ? "public" : default_schema;
+	}
 
 	static string GetConnectionString(ClientContext &context, const string &attach_path, string secret_name);
 

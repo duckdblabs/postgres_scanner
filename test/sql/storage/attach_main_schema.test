@@ -1,0 +1,28 @@
+# name: test/sql/storage/attach_main_schema.test
+# description: Test usage of the main schema in Postgres
+# group: [storage]
+
+require postgres_scanner
+
+require-env POSTGRES_TEST_DATABASE_AVAILABLE
+
+statement ok
+PRAGMA enable_verification
+
+statement ok
+ATTACH 'dbname=postgresscanner' AS s (TYPE POSTGRES)
+
+query I
+SELECT * FROM s.main.main_tbl
+----
+42
+NULL
+
+statement ok
+USE s
+
+query I
+SELECT * FROM main.main_tbl
+----
+42
+NULL

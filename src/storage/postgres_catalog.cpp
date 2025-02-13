@@ -141,9 +141,6 @@ void PostgresCatalog::ScanSchemas(ClientContext &context, std::function<void(Sch
 optional_ptr<SchemaCatalogEntry> PostgresCatalog::GetSchema(CatalogTransaction transaction, const string &schema_name,
                                                             OnEntryNotFound if_not_found,
                                                             QueryErrorContext error_context) {
-	if (schema_name == DEFAULT_SCHEMA) {
-		return GetSchema(transaction, default_schema, if_not_found, error_context);
-	}
 	auto &postgres_transaction = PostgresTransaction::Get(transaction.GetContext(), *this);
 	if (schema_name == "pg_temp") {
 		return GetSchema(transaction, postgres_transaction.GetTemporarySchema(), if_not_found, error_context);
